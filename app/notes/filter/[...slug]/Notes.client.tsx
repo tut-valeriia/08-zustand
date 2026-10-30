@@ -1,73 +1,73 @@
 "use client";
 
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { useDebouncedCallback } from "use-debounce";
+import Link from "next/link";
+import { useQuery, keepPreviousData } from "@tanstack/react-query";
+import { useDebounce } from "use-debounce";
 import { fetchNotes } from "@/lib/api";
-import SearchBox from "@/components/SearchBox/SearchBox";
-import Pagination from "@/components/Pagination/Pagination";
 import NoteList from "@/components/NoteList/NoteList";
-import Modal from "@/components/Modal/Modal";
-import NoteForm from "@/components/NoteForm/NoteForm";
+import Pagination from "@/components/Pagination/Pagination";
+import SearchBox from "@/components/SearchBox/SearchBox";
 import css from "./NotesPage.module.css";
 
 interface NotesClientProps {
-  tag?: string;
+  tag: string;
 }
 
 export default function NotesClient({ tag }: NotesClientProps) {
-  const [page, setPage] = useState<number>(1);
-  const [searchTerm, setSearchTerm] = useState<string>("");
-  const [activeSearch, setActiveSearch] = useState<string>("");
-  const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
+  const [page, setPage] = useState(1);
+  const [search, setSearch] = useState("");
+  const [debouncedSearch] = useDebounce(search, 500);
 
-  const debouncedSearch = useDebouncedCallback((value: string) => {
-    setActiveSearch(value);
-    setPage(1);
-  }, 300);
-
-  const handleSearchChange = (value: string) => {
-    setSearchTerm(value);
-    debouncedSearch(value);
-  };
-
-  const { data, isLoading, isError } = useQuery({
-    queryKey: ["notes", page, activeSearch, tag],
-    queryFn: () => fetchNotes({ page, perPage: 12, search: activeSearch, tag }),
-    placeholderData: (previousData) => previousData,
-    refetchOnMount: false,
+  const { data, isLoading, isError, error } = useQuery({
+    queryKey: ["notes", tag, page, debouncedSearch],
+    queryFn: () => fetchNotes({ tag, page, search: debouncedSearch }),
+    placeholderData: keepPreviousData,
   });
 
-  const notes = data?.notes ?? [];
-  const totalPages = data?.totalPages ?? 0;
+  const handleSearchChange = (value: string) => {
+    setSearch(value);
+    setPage(1);
+  };
+
+  const handlePageChange = (newPage: number) => {
+    setPage(newPage);
+  };
+
+  if (isLoading) {
+    return <div className={css.loading}>Loading notes...</div>;
+  }
+
+  if (isError) {
+    return (
+      <div className={css.error}>
+        Error: {error instanceof Error ? error.message : "Failed to load notes"}
+      </div>
+    );
+  }
 
   return (
-    <div className={css.app}>
-      <header className={css.toolbar}>
-        <SearchBox value={searchTerm} onChange={handleSearchChange} />
-
-        {totalPages > 1 && (
-          <Pagination
-            totalPages={totalPages}
-            currentPage={page}
-            onPageChange={setPage}
-          />
-        )}
-
-        <button className={css.button} onClick={() => setIsModalOpen(true)}>
+    <div className={css.container}>
+      <div className={css.toolbar}>
+        <SearchBox value={search} onChange={handleSearchChange} />
+        <Link href="/notes/action/create" className={css.createButton}>
           Create note +
-        </button>
-      </header>
+        </Link>
+      </div>
 
-      {isLoading && <p>Loading, please wait...</p>}
-      {isError && <p>Something went wrong.</p>}
-
-      {!isLoading && !isError && notes.length > 0 && <NoteList notes={notes} />}
-
-      {isModalOpen && (
-        <Modal onClose={() => setIsModalOpen(false)}>
-          <NoteForm onCancel={() => setIsModalOpen(false)} />
-        </Modal>
+      {data && data.notes.length > 0 ? (
+        <>
+          <NoteList notes={data.notes} />
+          {data.totalPages > 1 && (
+            <Pagination
+              currentPage={page}
+              totalPages={data.totalPages}
+              onPageChange={handlePageChange}
+            />
+          )}
+        </>
+      ) : (
+        <p className={css.empty}>No notes found</p>
       )}
     </div>
   );

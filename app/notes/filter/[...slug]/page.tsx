@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import {
   QueryClient,
   dehydrate,
@@ -6,27 +7,51 @@ import {
 import { fetchNotes } from "@/lib/api";
 import NotesClient from "./Notes.client";
 
-interface FilterNotesPageProps {
+interface FilterNotesProps {
   params: Promise<{ slug: string[] }>;
 }
 
-export default async function FilterNotesPage({
+export async function generateMetadata({
   params,
-}: FilterNotesPageProps) {
+}: FilterNotesProps): Promise<Metadata> {
   const { slug } = await params;
-  const rawTag = slug?.[0] || "all";
-  const tag = rawTag.toLowerCase() === "all" ? undefined : rawTag;
+  const currentTag = slug?.[0] || "all";
+  const formattedTag =
+    currentTag === "all" ? "All notes" : `Notes tagged "${currentTag}"`;
+
+  return {
+    title: `${formattedTag} | NoteHub`,
+    description: `Browse ${formattedTag.toLowerCase()} in your personal workspace.`,
+    openGraph: {
+      title: `${formattedTag} | NoteHub`,
+      description: `Browse ${formattedTag.toLowerCase()} in your personal workspace.`,
+      url: `https://notehub.com/notes/filter/${currentTag}`,
+      images: [
+        {
+          url: "https://ac.goit.global/fullstack/react/notehub-og-meta.jpg",
+          width: 1200,
+          height: 630,
+          alt: "NoteHub Notes Filter",
+        },
+      ],
+    },
+  };
+}
+
+export default async function NotesFilterPage({ params }: FilterNotesProps) {
+  const { slug } = await params;
+  const currentTag = slug?.[0] || "all";
 
   const queryClient = new QueryClient();
 
   await queryClient.prefetchQuery({
-    queryKey: ["notes", 1, "", tag],
-    queryFn: () => fetchNotes({ page: 1, perPage: 12, search: "", tag }),
+    queryKey: ["notes", currentTag, 1, ""],
+    queryFn: () => fetchNotes({ tag: currentTag, page: 1, search: "" }),
   });
 
   return (
     <HydrationBoundary state={dehydrate(queryClient)}>
-      <NotesClient tag={tag} />
+      <NotesClient tag={currentTag} />
     </HydrationBoundary>
   );
 }
